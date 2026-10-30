@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多人空闲时间表 - 约时间神器</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0284c7',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome 图标 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* 禁止拖拽选中文本，提升表格拖拽勾选体验 */
+        .no-select {
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar {
+            height: 6px;
+            width: 6px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen font-sans no-select flex flex-col">
+
+    <!-- 顶栏 Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-3">
+            <div class="flex items-center gap-2">
+                <div class="p-2 bg-indigo-600 text-white rounded-xl shadow-md shadow-indigo-200">
+                    <i class="fa-regular fa-calendar-check text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg text-slate-800 leading-tight">多人空闲时间表</h1>
+                    <p class="text-xs text-slate-500">周一至五 16-22点 | 周六 9-22点</p>
+                </div>
+            </div>
+
+            <!-- 右侧控制区：视图切换与分享 -->
+            <div class="flex items-center gap-2">
+                <div class="bg-slate-100 p-1 rounded-xl border border-slate-200 flex text-xs font-medium">
+                    <button id="tab-fill" onclick="switchMode('fill')" class="px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 bg-white text-indigo-600 shadow-sm">
+                        <i class="fa-solid fa-pen-to-square"></i> 我的填写
+                    </button>
+                    <button id="tab-heatmap" onclick="switchMode('heatmap')" class="px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 text-slate-600 hover:text-slate-900">
+                        <i class="fa-solid fa-fire"></i> 汇总热力图
+                    </button>
+                </div>
+                <button onclick="copyShareLink()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border border-indigo-200">
+                    <i class="fa-solid fa-share-nodes"></i> 分享表格
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-6 flex-1 w-full flex flex-col gap-6">
+
+        <!-- 名字设置卡片 (填写模式下显示) -->
+        <section id="user-config-card" class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3 w-full sm:w-auto">
+                <div class="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 font-bold flex items-center justify-center border border-indigo-100" id="user-avatar">
+                    <i class="fa-solid fa-user"></i>
+                </div>
+                <div class="flex-1">
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-0.5">我的名字 / 昵称</label>
+                    <input type="text" id="username-input" placeholder="输入您的名字以保存..." class="font-medium text-slate-700 focus:outline-none focus:border-indigo-500 border-b border-slate-300 pb-0.5 w-full sm:w-48 text-sm transition-colors">
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
+                <i class="fa-solid fa-circle-info text-indigo-500"></i>
+                <span>点击或拖拽表格格子，快速勾选/取消有空的时间。</span>
+            </div>
+        </section>
+
+        <!-- 统计信息与成员标签 (汇总模式显示) -->
+        <section id="heatmap-info-card" class="hidden bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-3">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2">
+                    <span class="font-bold text-slate-700 text-sm">已填报成员 (<span id="member-count">0</span>人)</span>
+                </div>
+                <!-- 热力图图例 -->
+                <div class="flex items-center gap-1.5 text-xs text-slate-500">
+                    <span>空闲人数：</span>
+                    <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-400 border border-slate-200">0人</span>
+                    <span class="w-4 h-4 rounded bg-emerald-100 border border-emerald-200"></span>
+                    <span class="w-4 h-4 rounded bg-emerald-300"></span>
+                    <span class="w-4 h-4 rounded bg-emerald-500"></span>
+                    <span class="w-4 h-4 rounded bg-emerald-700"></span>
+                    <span>最满</span>
+                </div>
+            </div>
+            <!-- 成员标签列表 -->
+            <div id="members-list" class="flex flex-wrap gap-2 text-xs">
+                <!-- 动态生成成员标签 -->
+            </div>
+        </section>
+
+        <!-- 主表格区域 -->
+        <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+            <div class="overflow-x-auto">
+                <table id="schedule-table" class="w-full border-collapse text-center text-xs">
+                    <thead>
+                        <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                            <th class="py-3 px-2 w-24 border-r border-slate-200 sticky left-0 bg-slate-50 z-10">时间段</th>
+                            <th class="py-3 px-3 min-w-[100px]">周一 (Mon)</th>
+                            <th class="py-3 px-3 min-w-[100px]">周二 (Tue)</th>
+                            <th class="py-3 px-3 min-w-[100px]">周三 (Wed)</th>
+                            <th class="py-3 px-3 min-w-[100px]">周四 (Thu)</th>
+                            <th class="py-3 px-3 min-w-[100px]">周五 (Fri)</th>
+                            <th class="py-3 px-3 min-w-[100px] bg-indigo-50/50 text-indigo-700">周六 (Sat)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body" class="divide-y divide-slate-100">
+                        <!-- 动态填充时间格子 -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 查看具体人员的弹窗 Modal -->
+    <div id="detail-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden transition-opacity">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-100 transform transition-all">
+            <div class="flex justify-between items-center mb-3 border-b border-slate-100 pb-2">
+                <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                    <i class="fa-regular fa-clock text-indigo-600"></i>
+                    <span id="modal-time-title">时间详情</span>
+                </h3>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 w-7 h-7 rounded-full flex items-center justify-center hover:bg-slate-100">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-3">
+                <div>
+                    <span class="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        <i class="fa-solid fa-check"></i> 有空人员 (<span id="available-count">0</span>)
+                    </span>
+                    <div id="available-users" class="flex flex-wrap gap-1.5 mt-2 text-xs text-slate-700">
+                        <!-- 动态显示 -->
+                    </div>
+                </div>
+
+                <div>
+                    <span class="text-xs font-semibold text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                        <i class="fa-solid fa-xmark"></i> 暂未勾选/无空
+                    </span>
+                    <div id="unavailable-users" class="flex flex-wrap gap-1.5 mt-2 text-xs text-slate-400">
+                        <!-- 动态显示 -->
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="closeModal()" class="w-full mt-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl text-xs transition-colors">
+                关闭
+            </button>
+        </div>
+    </div>
+
+    <!-- 简单提示 Toast -->
+    <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs px-4 py-2.5 rounded-xl shadow-xl opacity-0 transition-all pointer-events-none z-50 flex items-center gap-2">
+        <i class="fa-solid fa-circle-check text-emerald-400"></i>
+        <span id="toast-msg">提示信息</span>
+    </div>
+
+    <script>
+        // 定义星期与时间范围规则
+        const DAYS = [
+            { id: 1, name: '周一' },
+            { id: 2, name: '周二' },
+            { id: 3, name: '周三' },
+            { id: 4, name: '周四' },
+            { id: 5, name: '周五' },
+            { id: 6, name: '周六' }
+        ];
+
+        // 产生小时段
+        const HOURS = [];
+        // 周六从 9 点开始到 22 点，全天涵盖 9-22
+        for (let h = 9; h < 22; h++) {
+            HOURS.push({
+                start: h,
+                end: h + 1,
+                label: `${h < 10 ? '0' + h : h}:00 - ${(h + 1) < 10 ? '0' + (h + 1) : (h + 1)}:00`
+            });
+        }
+
+        // 全局状态数据
+        let currentMode = 'fill'; // 'fill' 或 'heatmap'
+        let currentUser = localStorage.getItem('schedule_username') || '成员1';
+        
+        // 核心数据结构: { [username]: [ 'd1_h16', 'd2_h17', ... ] }
+        let allSchedules = {};
+
+        // 初始化判断 URL 中是否有分享的数据
+        function initData() {
+            const hash = window.location.hash.substring(1);
+            if (hash) {
+                try {
+                    const decoded = JSON.parse(decodeURIComponent(atob(hash)));
+                    if (decoded && typeof decoded === 'object') {
+                        allSchedules = decoded;
+                    }
+                } catch (e) {
+                    console.error("解析分享链接数据失败", e);
+                }
+            }
+
+            // 如果本地有保存的数据且共享数据为空，读取本地
+            if (Object.keys(allSchedules).length === 0) {
+                const localData = localStorage.getItem('schedule_all_data');
+                if (localData) {
+                    try {
+                        allSchedules = JSON.parse(localData);
+                    } catch (e) {}
+                }
+            }
+
+            // 确保当前用户有数据框
+            if (!allSchedules[currentUser]) {
+                allSchedules[currentUser] = [];
+            }
+
+            document.getElementById('username-input').value = currentUser;
+            updateAvatar(currentUser);
+        }
+
+        // 保存本地状态并更新 URL
+        function saveData() {
+            localStorage.setItem('schedule_username', currentUser);
+            localStorage.setItem('schedule_all_data', JSON.stringify(allSchedules));
+            
+            // 更新 Hash 便于随时复制 URL 分享
+            try {
+                const encoded = btoa(encodeURIComponent(JSON.stringify(allSchedules)));
+                window.history.replaceState(null, '', '#' + encoded);
+            } catch (e) {}
+        }
+
+        // 生成表格节点
+        function renderTable() {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+
+            HOURS.forEach(hour => {
+                const tr = document.createElement('tr');
+                
+                // 时间列
+                const th = document.createElement('td');
+                th.className = 'py-2.5 px-2 font-mono text-slate-500 bg-slate-50 border-r border-slate-200 sticky left-0 font-medium';
+                th.innerText = hour.label;
+                tr.appendChild(th);
+
+                // 每一天列
+                DAYS.forEach(day => {
+                    const td = document.createElement('td');
+                    const slotKey = `d${day.id}_h${hour.start}`;
+                    
+                    // 周一到周五 9-16 点非开放时间处理
+                    const isWeekdayOut = (day.id >= 1 && day.id <= 5) && (hour.start < 16);
+
+                    if (isWeekdayOut) {
+                        td.className = 'bg-slate-100/60 border-b border-slate-100 cursor-not-allowed';
+                        td.innerHTML = `<span class="text-[10px] text-slate-300">—</span>`;
+                    } else {
+                        td.className = 'p-1 border-b border-slate-100 transition-all select-none cursor-pointer relative';
+                        td.dataset.slot = slotKey;
+                        td.dataset.day = day.name;
+                        td.dataset.time = hour.label;
+
+                        // 单元格内容/样式根据当前模式生成
+                        updateCellDisplay(td, slotKey);
+
+                        // 绑扯鼠标与触摸事件 (支持拖拽选择)
+                        setupCellEvents(td, slotKey);
+                    }
+                    tr.appendChild(td);
+                });
+
+                tbody.appendChild(tr);
+            });
+
+            renderMembersList();
+        }
+
+        // 更新单个单元格展示
+        function updateCellDisplay(td, slotKey) {
+            if (currentMode === 'fill') {
+                // 个人填写模式
+                const userSlots = allSchedules[currentUser] || [];
+                const isSelected = userSlots.includes(slotKey);
+                
+                if (isSelected) {
+                    td.innerHTML = `
+                        <div class="h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold shadow-sm shadow-indigo-200 border border-indigo-500">
+                            <i class="fa-solid fa-check text-sm"></i>
+                        </div>`;
+                } else {
+                    td.innerHTML = `
+                        <div class="h-9 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200/80 transition-colors"></div>`;
+                }
+            } else {
+                // 汇总热力图模式
+                const totalUsers = Object.keys(allSchedules).length;
+                let availablePeople = [];
+                
+                Object.keys(allSchedules).forEach(user => {
+                    if (allSchedules[user] && allSchedules[user].includes(slotKey)) {
+                        availablePeople.push(user);
+                    }
+                });
+
+                const count = availablePeople.length;
+                const ratio = totalUsers > 0 ? count / totalUsers : 0;
+
+                let bgClass = 'bg-slate-50 border-slate-200 text-slate-400';
+                if (count > 0) {
+                    if (ratio <= 0.25) bgClass = 'bg-emerald-100 text-emerald-800 border-emerald-200 font-semibold';
+                    else if (ratio <= 0.5) bgClass = 'bg-emerald-300 text-emerald-900 border-emerald-400 font-bold';
+                    else if (ratio <= 0.75) bgClass = 'bg-emerald-500 text-white border-emerald-600 font-bold';
+                    else bgClass = 'bg-emerald-600 text-white border-emerald-700 font-bold';
+                }
+
+                td.innerHTML = `
+                    <div class="h-9 rounded-lg ${bgClass} border flex items-center justify-center text-xs transition-all shadow-2xl">
+                        ${count > 0 ? `${count}人` : ''}
+                    </div>`;
+            }
+        }
+
+        // 事件绑定与拖拽交互逻辑
+        let isMouseDown = false;
+        let isSelecting = true; // true: 批量勾选, false: 批量取消
+
+        function setupCellEvents(td, slotKey) {
+            // 点击或鼠标按下的逻辑
+            const handleStart = (e) => {
+                if (currentMode === 'heatmap') {
+                    showDetailModal(td.dataset.day, td.dataset.time, slotKey);
+                    return;
+                }
+                
+                isMouseDown = true;
+                const userSlots = allSchedules[currentUser] || [];
+                isSelecting = !userSlots.includes(slotKey); // 如果当前没选中，拖拽就是勾选
+                toggleSlot(slotKey, isSelecting);
+                updateCellDisplay(td, slotKey);
+            };
+
+            const handleEnter = (e) => {
+                if (isMouseDown && currentMode === 'fill') {
+                    toggleSlot(slotKey, isSelecting);
+                    updateCellDisplay(td, slotKey);
+                }
+            };
+
+            td.onmousedown = handleStart;
+            td.onmouseenter = handleEnter;
+
+            // 触摸屏支持
+            td.ontouchstart = (e) => {
+                handleStart(e);
+            };
+        }
+
+        // 全局松开鼠标处理
+        window.onmouseup = () => { isMouseDown = false; };
+
+        // 切换某个时间段的勾选状态
+        function toggleSlot(slotKey, state) {
+            if (!allSchedules[currentUser]) {
+                allSchedules[currentUser] = [];
+            }
+            const slots = allSchedules[currentUser];
+            const idx = slots.indexOf(slotKey);
+
+            if (state && idx === -1) {
+                slots.push(slotKey);
+            } else if (!state && idx !== -1) {
+                slots.splice(idx, 1);
+            }
+            saveData();
+        }
+
+        // 切换视图模式
+        function switchMode(mode) {
+            currentMode = mode;
+            const tabFill = document.getElementById('tab-fill');
+            const tabHeatmap = document.getElementById('tab-heatmap');
+            const userCard = document.getElementById('user-config-card');
+            const heatmapCard = document.getElementById('heatmap-info-card');
+
+            if (mode === 'fill') {
+                tabFill.className = "px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 bg-white text-indigo-600 shadow-sm font-semibold";
+                tabHeatmap.className = "px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 text-slate-600 hover:text-slate-900";
+                userCard.classList.remove('hidden');
+                heatmapCard.classList.add('hidden');
+            } else {
+                tabHeatmap.className = "px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 bg-white text-indigo-600 shadow-sm font-semibold";
+                tabFill.className = "px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 text-slate-600 hover:text-slate-900";
+                userCard.classList.add('hidden');
+                heatmapCard.classList.remove('hidden');
+            }
+
+            // 重新渲染整个表格的显示
+            const cells = document.querySelectorAll('#table-body td[data-slot]');
+            cells.forEach(td => {
+                updateCellDisplay(td, td.dataset.slot);
+            });
+        }
+
+        // 渲染已填报人员标签
+        function renderMembersList() {
+            const listEl = document.getElementById('members-list');
+            const countEl = document.getElementById('member-count');
+            listEl.innerHTML = '';
+
+            const users = Object.keys(allSchedules);
+            countEl.innerText = users.length;
+
+            users.forEach(user => {
+                const count = (allSchedules[user] || []).length;
+                const tag = document.createElement('div');
+                tag.className = 'px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 flex items-center gap-1.5';
+                tag.innerHTML = `
+                    <span class="w-2 h-2 rounded-full ${user === currentUser ? 'bg-indigo-500' : 'bg-slate-400'}"></span>
+                    <span class="font-medium">${escapeHtml(user)}</span>
+                    <span class="text-[10px] text-slate-400">(${count}个时段)</span>
+                `;
+                listEl.appendChild(tag);
+            });
+        }
+
+        // 显示时间详情 Modal
+        function showDetailModal(dayName, timeLabel, slotKey) {
+            const modal = document.getElementById('detail-modal');
+            document.getElementById('modal-time-title').innerText = `${dayName} ${timeLabel}`;
+
+            const availableBox = document.getElementById('available-users');
+            const unavailableBox = document.getElementById('unavailable-users');
+
+            availableBox.innerHTML = '';
+            unavailableBox.innerHTML = '';
+
+            let availableCount = 0;
+            const users = Object.keys(allSchedules);
+
+            users.forEach(user => {
+                const isAvail = (allSchedules[user] || []).includes(slotKey);
+                const item = document.createElement('span');
+                
+                if (isAvail) {
+                    availableCount++;
+                    item.className = 'px-2 py-1 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200 font-medium';
+                    item.innerText = user;
+                    availableBox.appendChild(item);
+                } else {
+                    item.className = 'px-2 py-1 rounded-md bg-slate-100 text-slate-400 border border-slate-200';
+                    item.innerText = user;
+                    unavailableBox.appendChild(item);
+                }
+            });
+
+            document.getElementById('available-count').innerText = availableCount;
+            if (availableCount === 0) {
+                availableBox.innerHTML = '<span class="text-slate-400 italic">暂无人有空</span>';
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('detail-modal').classList.add('hidden');
+        }
+
+        // 修改名字监听
+        document.getElementById('username-input').addEventListener('input', (e) => {
+            const newName = e.target.value.trim() || '未命名';
+            if (newName !== currentUser) {
+                // 转移数据到新名字下
+                const oldData = allSchedules[currentUser] || [];
+                delete allSchedules[currentUser];
+                currentUser = newName;
+                allSchedules[currentUser] = oldData;
+
+                updateAvatar(currentUser);
+                saveData();
+                renderMembersList();
+            }
+        });
+
+        // 头像文本更新
+        function updateAvatar(name) {
+            const avatar = document.getElementById('user-avatar');
+            avatar.innerText = name.charAt(0).toUpperCase() || 'U';
+        }
+
+        // 复制分享链接
+        function copyShareLink() {
+            saveData();
+            const url = window.location.href;
+            
+            // 复制到剪贴板
+            const dummy = document.createElement('input');
+            document.body.appendChild(dummy);
+            dummy.value = url;
+            dummy.select();
+            document.execCommand('copy');
+            document.body.removeChild(dummy);
+
+            showToast('已复制包含所有人数据的分享链接！可直接发给朋友');
+        }
+
+        // 简易 Toast 提示
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').innerText = msg;
+            toast.classList.remove('opacity-0');
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+            }, 3000);
+        }
+
+        // 转义防 XSS
+        function escapeHtml(str) {
+            return str.replace(/[&<>"']/g, function(m) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#039;'
+                }[m];
+            });
+        }
+
+        // 初始化运行
+        window.onload = () => {
+            initData();
+            renderTable();
+        };
+    </script>
+</body>
+</html>
