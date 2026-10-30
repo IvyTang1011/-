@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多人空闲时间收集表</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome 图标 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* 禁止在网格拖拽时选中文字 */
+        .no-select {
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        /* 自定义滚动条样式 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col no-select">
+
+    <!-- 顶部导航与 Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-xl shadow-md shadow-indigo-100">
+                    <i class="fa-solid fa-calendar-days"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg text-slate-900 leading-tight">TimeSync 聚会/开会时间协调</h1>
+                    <p class="text-xs text-slate-500 hidden sm:block">快速收集大家空闲时间，智能匹配最佳方案</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-2">
+                <button onclick="exportData()" class="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex items-center gap-1.5">
+                    <i class="fa-solid fa-download"></i> <span class="hidden sm:inline">导出数据</span>
+                </button>
+                <button onclick="importDataPrompt()" class="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex items-center gap-1.5">
+                    <i class="fa-solid fa-upload"></i> <span class="hidden sm:inline">导入数据</span>
+                </button>
+                <button onclick="clearAllData()" class="px-3 py-1.5 text-xs font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors flex items-center gap-1.5">
+                    <i class="fa-solid fa-trash-can"></i> <span class="hidden sm:inline">重置</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主体区域 -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col md:flex-row gap-6">
+
+        <!-- 左侧/上方：控制面板与成员管理 -->
+        <aside class="w-full md:w-80 flex-shrink-0 space-y-6">
+
+            <!-- 模式切换卡片 -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">视图与编辑模式</h2>
+                <div class="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+                    <button id="btn-mode-heatmap" onclick="switchMode('heatmap')" class="py-2 text-xs font-semibold rounded-lg transition-all shadow-sm bg-white text-indigo-600 flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-layer-group"></i> 重合热力图
+                    </button>
+                    <button id="btn-mode-edit" onclick="switchMode('edit')" class="py-2 text-xs font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900 flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-pen-to-square"></i> 个人填报
+                    </button>
+                </div>
+
+                <!-- 填报模式下的个人设置 -->
+                <div id="edit-user-panel" class="hidden space-y-3 pt-2 border-t border-slate-100">
+                    <label class="block text-xs font-medium text-slate-700">当前填写人姓名：</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="user-name-input" placeholder="输入你的名字..." class="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                        <input type="color" id="user-color-input" value="#4f46e5" class="w-10 h-10 p-1 border border-slate-300 rounded-xl cursor-pointer">
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="selectAllSlots()" class="flex-1 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 transition">全选有空</button>
+                        <button onclick="clearCurrentSlots()" class="flex-1 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 transition">清空选择</button>
+                    </div>
+                    <p class="text-[11px] text-slate-400">💡 提示：在右侧表格上点击或按住鼠标划过即可勾选/取消。</p>
+                </div>
+
+                <!-- 热力图模式下的重合图例 -->
+                <div id="heatmap-legend" class="space-y-2 pt-2 border-t border-slate-100">
+                    <div class="flex justify-between items-center text-xs text-slate-500">
+                        <span>没人有空</span>
+                        <span>全员有空</span>
+                    </div>
+                    <div class="h-3 rounded-full bg-gradient-to-r from-slate-100 via-indigo-200 to-indigo-600 border border-slate-200"></div>
+                </div>
+            </div>
+
+            <!-- 月份与日期选择卡片 -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">选择要查看的日期</h2>
+                    <div class="flex items-center space-x-1">
+                        <button onclick="changeMonth(-1)" class="w-7 h-7 flex items-center justify-center text-slate-500 hover:bg-slate-100 rounded-lg"><i class="fa-solid fa-chevron-left text-xs"></i></button>
+                        <span id="current-month-label" class="text-sm font-semibold text-slate-700">2026年 10月</span>
+                        <button onclick="changeMonth(1)" class="w-7 h-7 flex items-center justify-center text-slate-500 hover:bg-slate-100 rounded-lg"><i class="fa-solid fa-chevron-right text-xs"></i></button>
+                    </div>
+                </div>
+
+                <!-- 简易小日历网格 -->
+                <div class="grid grid-cols-7 gap-1 text-center text-xs">
+                    <div class="text-slate-400 py-1 font-medium">日</div>
+                    <div class="text-slate-400 py-1 font-medium">一</div>
+                    <div class="text-slate-400 py-1 font-medium">二</div>
+                    <div class="text-slate-400 py-1 font-medium">三</div>
+                    <div class="text-slate-400 py-1 font-medium">四</div>
+                    <div class="text-slate-400 py-1 font-medium">五</div>
+                    <div class="text-slate-400 py-1 font-medium">六</div>
+                </div>
+                <div id="calendar-days-grid" class="grid grid-cols-7 gap-1 text-center text-xs">
+                    <!-- 动态生成日期 -->
+                </div>
+                <div class="text-right">
+                    <button onclick="selectCurrentWeek()" class="text-xs text-indigo-600 hover:underline font-medium">选择本周7天</button>
+                </div>
+            </div>
+
+            <!-- 参与人员列表 -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">已填报成员 (<span id="user-count">0</span>)</h2>
+                    <span class="text-[11px] text-slate-400">勾选进行筛选</span>
+                </div>
+                <div id="members-list" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    <!-- 动态成员列表 -->
+                </div>
+            </div>
+
+        </aside>
+
+        <!-- 右侧：核心时间大表盘 -->
+        <section class="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6 flex flex-col overflow-hidden">
+            
+            <!-- 头部说明与查看详情展示 -->
+            <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-2 mb-4 pb-4 border-b border-slate-100">
+                <div>
+                    <h3 id="table-title" class="text-base font-bold text-slate-800">所有成员空闲重合总览</h3>
+                    <p class="text-xs text-slate-500 mt-0.5" id="table-subtitle">点击网格可实时查看具体有哪些人在该时段有空</p>
+                </div>
+                <!-- 悬停/点击单元格时的成员展示框 -->
+                <div id="hover-info" class="hidden bg-indigo-50 border border-indigo-100 text-indigo-900 text-xs px-3 py-2 rounded-xl flex items-center gap-2">
+                    <i class="fa-solid fa-clock text-indigo-500"></i>
+                    <span id="hover-info-text">选择时间格查看详情</span>
+                </div>
+            </div>
+
+            <!-- 时间表网格滚动容器 -->
+            <div class="flex-1 overflow-x-auto overflow-y-auto max-h-[600px] border border-slate-100 rounded-xl relative" id="timetable-container">
+                <table class="w-full border-collapse text-xs min-w-[600px]">
+                    <thead>
+                        <tr class="bg-slate-50 sticky top-0 z-20 shadow-sm" id="table-header-row">
+                            <th class="p-3 w-20 text-center font-medium text-slate-400 border-b border-r border-slate-200 bg-slate-50">时间</th>
+                            <!-- 日期表头动态生成 -->
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <!-- 动态生成时间行 (09:00 - 22:00) -->
+                    </tbody>
+                </table>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- 弹窗通知/信息提示组件 -->
+    <div id="toast" class="fixed bottom-6 right-6 bg-slate-800 text-white px-4 py-3 rounded-xl shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 text-xs z-50 flex items-center gap-2">
+        <i class="fa-solid fa-circle-info text-indigo-400"></i>
+        <span id="toast-message">操作成功</span>
+    </div>
+
+    <!-- JavaScript 逻辑处理 -->
+    <script>
+        // ==================== 全局状态数据 ====================
+        const HOURS = [];
+        for (let h = 9; h <= 22; h++) {
+            HOURS.push(`${h.toString().padStart(2, '0')}:00`);
+        }
+
+        // 当前视图年月
+        let currentYear = new Date().getFullYear();
+        let currentMonth = new Date().getMonth(); // 0-11
+
+        // 选中的显示日期数组 (格式: YYYY-MM-DD)
+        let selectedDates = [];
+
+        // 协作数据模型: { username: { color: string, visible: boolean, slots: [ "YYYY-MM-DD HH:00", ... ] } }
+        let store = JSON.parse(localStorage.getItem('timesync_data') || '{}');
+
+        // 当前用户模式与编辑身份
+        let viewMode = 'heatmap'; // 'heatmap' 或 'edit'
+        let currentUserName = localStorage.getItem('timesync_current_user') || '张三';
+        let currentUserColor = localStorage.getItem('timesync_current_color') || '#4f46e5';
+
+        // 鼠标拖拽状态
+        let isMouseDown = false;
+        let dragTargetState = true; // true 为勾选，false 为取消
+
+        // ==================== 初始化与事件绑定 ====================
+        window.onload = function() {
+            // 初始化选中的日期（默认当前日期开始的未来5天或本周）
+            initDefaultSelectedDates();
+
+            // 初始化编辑模式面板
+            document.getElementById('user-name-input').value = currentUserName;
+            document.getElementById('user-color-input').value = currentUserColor;
+
+            // 监听编辑人员姓名/颜色变动
+            document.getElementById('user-name-input').addEventListener('input', (e) => {
+                currentUserName = e.target.value.trim() || '匿名';
+                localStorage.setItem('timesync_current_user', currentUserName);
+                ensureCurrentUserExists();
+                renderMembersList();
+            });
+
+            document.getElementById('user-color-input').addEventListener('input', (e) => {
+                currentUserColor = e.target.value;
+                localStorage.setItem('timesync_current_color', currentUserColor);
+                if (store[currentUserName]) {
+                    store[currentUserName].color = currentUserColor;
+                    saveStore();
+                    renderMembersList();
+                    renderTimetable();
+                }
+            });
+
+            // 全局鼠标松开监听
+            window.addEventListener('mouseup', () => { isMouseDown = false; });
+
+            // 渲染日历与时间表
+            renderCalendar();
+            renderMembersList();
+            renderTimetable();
+        };
+
+        function initDefaultSelectedDates() {
+            const today = new Date();
+            selectedDates = [];
+            for (let i = 0; i < 5; i++) {
+                const d = new Date(today);
+                d.setDate(today.getDate() + i);
+                selectedDates.push(formatDateKey(d));
+            }
+        }
+
+        function formatDateKey(dateObj) {
+            const y = dateObj.getFullYear();
+            const m = (dateObj.getMonth() + 1).toString().padStart(2, '0');
+            const d = dateObj.getDate().toString().padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        function saveStore() {
+            localStorage.setItem('timesync_data', JSON.stringify(store));
+        }
+
+        function ensureCurrentUserExists() {
+            if (!store[currentUserName]) {
+                store[currentUserName] = {
+                    color: currentUserColor,
+                    visible: true,
+                    slots: []
+                };
+                saveStore();
+            }
+        }
+
+        // ==================== 视图模式切换 ====================
+        function switchMode(mode) {
+            viewMode = mode;
+            const btnHeatmap = document.getElementById('btn-mode-heatmap');
+            const btnEdit = document.getElementById('btn-mode-edit');
+            const editPanel = document.getElementById('edit-user-panel');
+            const legend = document.getElementById('heatmap-legend');
+            const tableTitle = document.getElementById('table-title');
+            const tableSubtitle = document.getElementById('table-subtitle');
+
+            if (mode === 'heatmap') {
+                btnHeatmap.className = "py-2 text-xs font-semibold rounded-lg transition-all shadow-sm bg-white text-indigo-600 flex items-center justify-center gap-1.5";
+                btnEdit.className = "py-2 text-xs font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900 flex items-center justify-center gap-1.5";
+                editPanel.classList.add('hidden');
+                legend.classList.remove('hidden');
+                tableTitle.innerText = "所有成员空闲重合总览";
+                tableSubtitle.innerText = "点击网格可实时查看具体有哪些人在该时段有空";
+            } else {
+                btnEdit.className = "py-2 text-xs font-semibold rounded-lg transition-all shadow-sm bg-white text-indigo-600 flex items-center justify-center gap-1.5";
+                btnHeatmap.className = "py-2 text-xs font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900 flex items-center justify-center gap-1.5";
+                editPanel.classList.remove('hidden');
+                legend.classList.add('hidden');
+                ensureCurrentUserExists();
+                tableTitle.innerText = `正在编辑：${currentUserName} 的空闲时间`;
+                tableSubtitle.innerText = "在表格上点击或按住滑动，标注你有空的时间段";
+            }
+            renderTimetable();
+        }
+
+        // ==================== 日历与日期选择 logic ====================
+        function changeMonth(delta) {
+            currentMonth += delta;
+            if (currentMonth < 0) {
+                currentMonth = 11;
+                currentYear--;
+            } else if (currentMonth > 11) {
+                currentMonth = 0;
+                currentYear++;
+            }
+            renderCalendar();
+        }
+
+        function renderCalendar() {
+            document.getElementById('current-month-label').innerText = `${currentYear}年 ${currentMonth + 1}月`;
+            const grid = document.getElementById('calendar-days-grid');
+            grid.innerHTML = '';
+
+            const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+            // 填充前置空白格
+            for (let i = 0; i < firstDay; i++) {
+                grid.appendChild(document.createElement('div'));
+            }
+
+            // 渲染当月每一天
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateObj = new Date(currentYear, currentMonth, day);
+                const dateStr = formatDateKey(dateObj);
+                const isSelected = selectedDates.includes(dateStr);
+
+                const btn = document.createElement('button');
+                btn.className = `py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    isSelected 
+                        ? 'bg-indigo-600 text-white shadow-sm' 
+                        : 'hover:bg-slate-100 text-slate-700'
+                }`;
+                btn.innerText = day;
+                btn.onclick = () => toggleDateSelection(dateStr);
+                grid.appendChild(btn);
+            }
+        }
+
+        function toggleDateSelection(dateStr) {
+            if (selectedDates.includes(dateStr)) {
+                if (selectedDates.length > 1) {
+                    selectedDates = selectedDates.filter(d => d !== dateStr);
+                } else {
+                    showToast('至少保留选择一天');
+                    return;
+                }
+            } else {
+                selectedDates.push(dateStr);
+                selectedDates.sort();
+            }
+            renderCalendar();
+            renderTimetable();
+        }
+
+        function selectCurrentWeek() {
+            const today = new Date();
+            const dayOfWeek = today.getDay();
+            const startOfWeek = new Date(today);
+            startOfWeek.setDate(today.getDate() - dayOfWeek);
+
+            selectedDates = [];
+            for (let i = 0; i < 7; i++) {
+                const d = new Date(startOfWeek);
+                d.setDate(startOfWeek.getDate() + i);
+                selectedDates.push(formatDateKey(d));
+            }
+            currentYear = startOfWeek.getFullYear();
+            currentMonth = startOfWeek.getMonth();
+            renderCalendar();
+            renderTimetable();
+            showToast('已切换至本周视图');
+        }
+
+        // ==================== 时间表核心渲染与交互 ====================
+        function renderTimetable() {
+            const headerRow = document.getElementById('table-header-row');
+            const tbody = document.getElementById('table-body');
+
+            // 1. 清空并生成表头
+            headerRow.innerHTML = '<th class="p-3 w-20 text-center font-medium text-slate-400 border-b border-r border-slate-200 bg-slate-50">时间</th>';
+            selectedDates.forEach(dateStr => {
+                const dateObj = new Date(dateStr);
+                const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+                const weekName = weekDays[dateObj.getDay()];
+                const displayDate = `${dateStr.slice(5)} (${weekName})`;
+
+                const th = document.createElement('th');
+                th.className = 'p-2 text-center border-b border-r border-slate-200 bg-slate-50 font-semibold text-slate-700 min-w-[90px]';
+                th.innerHTML = `<div>${displayDate}</div>`;
+                headerRow.appendChild(th);
+            });
+
+            // 2. 生成表格主体
+            tbody.innerHTML = '';
+            HOURS.forEach(hour => {
+                const tr = document.createElement('tr');
+                
+                // 左侧时间列
+                const tdTime = document.createElement('td');
+                tdTime.className = 'p-2 text-center text-slate-400 font-medium border-b border-r border-slate-200 bg-slate-50/50 text-[11px]';
+                tdTime.innerText = hour;
+                tr.appendChild(tdTime);
+
+                // 每一个日期对应的格
+                selectedDates.forEach(dateStr => {
+                    const slotKey = `${dateStr} ${hour}`;
+                    const td = document.createElement('td');
+                    td.className = 'p-1 border-b border-r border-slate-200 h-11 text-center transition-all cursor-pointer relative';
+                    
+                    // 获取有空的人员列表 (过滤 visible 为 true 的)
+                    const availableUsers = Object.keys(store).filter(user => {
+                        return store[user].visible && store[user].slots && store[user].slots.includes(slotKey);
+                    });
+
+                    // 渲染网格视图样式
+                    if (viewMode === 'heatmap') {
+                        const visibleUsersCount = Object.keys(store).filter(u => store[u].visible).length;
+                        const count = availableUsers.length;
+                        
+                        if (count > 0 && visibleUsersCount > 0) {
+                            const ratio = count / visibleUsersCount;
+                            // 颜色加深透明度
+                            td.style.backgroundColor = `rgba(79, 70, 229, ${Math.max(0.15, ratio)})`;
+                            td.innerHTML = `<span class="font-bold text-xs ${ratio > 0.5 ? 'text-white' : 'text-indigo-900'}">${count}人</span>`;
+                        } else {
+                            td.style.backgroundColor = '#ffffff';
+                        }
+
+                        // 查看详情事件
+                        td.onclick = () => showSlotDetails(slotKey, availableUsers);
+                        td.onmouseenter = () => showSlotDetails(slotKey, availableUsers);
+
+                    } else {
+                        // 编辑模式
+                        ensureCurrentUserExists();
+                        const isUserAvailable = store[currentUserName].slots.includes(slotKey);
+                        
+                        if (isUserAvailable) {
+                            td.style.backgroundColor = store[currentUserName].color;
+                            td.innerHTML = `<i class="fa-solid fa-check text-white text-xs"></i>`;
+                        } else {
+                            td.style.backgroundColor = '#ffffff';
+                            td.innerHTML = '';
+                        }
+
+                        // 鼠标拖拽/点击事件处理
+                        td.onmousedown = (e) => {
+                            e.preventDefault();
+                            isMouseDown = true;
+                            dragTargetState = !isUserAvailable; // 取反
+                            toggleSlotForCurrentUser(slotKey, dragTargetState);
+                            renderTimetable();
+                        };
+
+                        td.onmouseenter = () => {
+                            if (isMouseDown) {
+                                toggleSlotForCurrentUser(slotKey, dragTargetState);
+                                renderTimetable();
+                            }
+                        };
+                    }
+
+                    tr.appendChild(td);
+                });
+
+                tbody.appendChild(tr);
+            });
+        }
+
+        // ==================== 编辑模式快捷操作 ====================
+        function toggleSlotForCurrentUser(slotKey, setAvailable) {
+            ensureCurrentUserExists();
+            const slots = store[currentUserName].slots;
+            const index = slots.indexOf(slotKey);
+            
+            if (setAvailable && index === -1) {
+                slots.push(slotKey);
+            } else if (!setAvailable && index !== -1) {
+                slots.splice(index, 1);
+            }
+            saveStore();
+        }
+
+        function selectAllSlots() {
+            ensureCurrentUserExists();
+            const slots = store[currentUserName].slots;
+            selectedDates.forEach(date => {
+                HOURS.forEach(hour => {
+                    const key = `${date} ${hour}`;
+                    if (!slots.includes(key)) slots.push(key);
+                });
+            });
+            saveStore();
+            renderTimetable();
+            showToast('已全部设置为有空');
+        }
+
+        function clearCurrentSlots() {
+            ensureCurrentUserExists();
+            store[currentUserName].slots = [];
+            saveStore();
+            renderTimetable();
+            showToast('已清空当前空闲时间');
+        }
+
+        // ==================== 热力图详情提示 ====================
+        function showSlotDetails(slotKey, availableUsers) {
+            const hoverInfo = document.getElementById('hover-info');
+            const hoverText = document.getElementById('hover-info-text');
+            hoverInfo.classList.remove('hidden');
+
+            if (availableUsers.length === 0) {
+                hoverText.innerHTML = `<strong>${slotKey}</strong>：暂无人员有空`;
+            } else {
+                hoverText.innerHTML = `<strong>${slotKey}</strong> (${availableUsers.length}人有空)：<span class="font-semibold text-indigo-700">${availableUsers.join('、')}</span>`;
+            }
+        }
+
+        // ==================== 成员列表管理 ====================
+        function renderMembersList() {
+            const container = document.getElementById('members-list');
+            const userCountEl = document.getElementById('user-count');
+            container.innerHTML = '';
+
+            const users = Object.keys(store);
+            userCountEl.innerText = users.length;
+
+            if (users.length === 0) {
+                container.innerHTML = `<div class="text-xs text-slate-400 py-2">暂无成员填报，快去右侧添加吧~</div>`;
+                return;
+            }
+
+            users.forEach(user => {
+                const item = store[user];
+                const div = document.createElement('div');
+                div.className = "flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100 hover:bg-slate-100 transition";
+
+                div.innerHTML = `
+                    <div class="flex items-center space-x-2">
+                        <input type="checkbox" ${item.visible ? 'checked' : ''} onchange="toggleUserVisibility('${user}')" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+                        <span class="w-3 h-3 rounded-full inline-block" style="background-color: ${item.color}"></span>
+                        <span class="text-xs font-medium text-slate-700">${user}</span>
+                    </div>
+                    <button onclick="deleteUser('${user}')" class="text-slate-400 hover:text-rose-500 text-xs px-1">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function toggleUserVisibility(user) {
+            if (store[user]) {
+                store[user].visible = !store[user].visible;
+                saveStore();
+                renderTimetable();
+            }
+        }
+
+        function deleteUser(user) {
+            if (confirm(`确定要移除成员“${user}”的空闲数据吗？`)) {
+                delete store[user];
+                saveStore();
+                renderMembersList();
+                renderTimetable();
+                showToast(`已删除 ${user}`);
+            }
+        }
+
+        // ==================== 数据导入导出与重置 ====================
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(store, null, 2));
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", `timesync_data_${formatDateKey(new Date())}.json`);
+            dlAnchorElem.click();
+            showToast('数据已导出为 JSON 文件');
+        }
+
+        function importDataPrompt() {
+            const jsonStr = prompt("请贴入导出的 JSON 数据字符串：");
+            if (jsonStr) {
+                try {
+                    const parsed = JSON.parse(jsonStr);
+                    if (typeof parsed === 'object') {
+                        store = parsed;
+                        saveStore();
+                        renderMembersList();
+                        renderTimetable();
+                        showToast('成功导入数据！');
+                    }
+                } catch (e) {
+                    alert('JSON 格式不正确，导入失败');
+                }
+            }
+        }
+
+        function clearAllData() {
+            if (confirm("确定要重置并清空所有人的填报数据吗？此操作无法撤销。")) {
+                store = {};
+                saveStore();
+                renderMembersList();
+                renderTimetable();
+                showToast('已清空所有数据');
+            }
+        }
+
+        // ==================== 快捷通知提示 ====================
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            const msgEl = document.getElementById('toast-message');
+            msgEl.innerText = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 2500);
+        }
+    </script>
+</body>
+</html>
